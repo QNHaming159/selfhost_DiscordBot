@@ -2,7 +2,7 @@
 
 You are to develop a Discord bot using Pycord (Python 3.13) that provides a reaction role system for a single guild. The bot must:
 
-- Use slash commands only.
+- Use **slash commands only** – no prefix commands (`!`, `?`, etc.).
 - Run only on a specific guild ID (provided in config).
 - Be optimised for speed (use ephemeral responses, defer when needed).
 - Persist reaction role configurations across restarts using JSON storage.
@@ -13,7 +13,7 @@ You are to develop a Discord bot using Pycord (Python 3.13) that provides a reac
 - For creation:
   - Collect embed title, description, image URL, color via a modal.
   - Use button‑driven navigation for subsequent choices (type, target channel, role mappings).
-  - Allow adding multiple role mappings (each with a label/emoji and role ID).
+  - Allow adding multiple role mappings (each with a **label** for buttons, or an **emoji** for emoji type).
   - Send the final embed to the chosen channel with interactive components.
   - Auto‑delete or edit previous wizard messages to keep only the current step visible to the creator.
 - When a user clicks a button or adds/removes an emoji:
@@ -21,15 +21,17 @@ You are to develop a Discord bot using Pycord (Python 3.13) that provides a reac
   - Respond with an ephemeral message "only you can see this" confirming the action.
   - Auto‑delete that ephemeral message after 30 seconds.
 - On bot restart, reload all stored configurations and reattach persistent views (for buttons) or reaction listeners (for emojis).
-- File structure: `main.py`, `cogs/reaction_roles.py`, `data/server_config.json`, `data/reaction_roles.json`, `requirements.txt`.
-- Use environment variable `DISCORD_TOKEN` for the bot token.
+- All configuration (Discord token, guild ID, admin role IDs) is stored in **one file**: `data/server_config.json`.  
+  An example `data/server_config.example.json` is committed, and `server_config.json` is ignored by Git.
 - Include a `.gitignore` with typical Python and Discord bot ignores (`__pycache__/`, `.env`, `*.pyc`, etc.).
+- Support **multiple admin roles** (list of role IDs in config).
+- Provide a **data storage** (`reaction_roles.json`) that stores all necessary data to relink the embed after restart.
 - All code must be production‑ready, well‑commented, and handle errors gracefully.
 
 Additional notes from the original request:
 - The bot is intended for Visual Studio 2022 and Git.
 - The creation wizard must use buttons (not modals) for navigation steps after the initial modal.
-- Emoji‑based roles could require handling raw reaction events (example provided in Pycord examples).
+- Emoji‑based roles require handling raw reaction events (example provided in Pycord examples).
 - Button‑based roles require persistent views (example provided).
 
 The following Pycord references were given:

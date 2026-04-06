@@ -1,16 +1,18 @@
 import json
-import os
 import discord
 from discord.ext import commands
 
-# Load configuration
-with open("data/server_config.json", "r") as f:
-    config = json.load(f)
+# Load single config file
+def load_config():
+    with open("data/server_config.json", "r") as f:
+        return json.load(f)
 
+config = load_config()
+TOKEN = config["discord_token"]
 GUILD_ID = config["guild_id"]
 ADMIN_ROLE_IDS = config["admin_role_ids"]
 
-# Define a check for admin roles
+# Admin check using loaded admin role IDs
 def is_admin():
     async def predicate(ctx: discord.ApplicationContext):
         if not ctx.guild:
@@ -29,27 +31,17 @@ class AdminBot(commands.Bot):
         super().__init__(command_prefix="!", intents=intents)
 
     async def setup_hook(self):
-        # Load reaction role cog
         await self.load_extension("cogs.reaction_roles")
-        # Sync commands to the specific guild only
         self.synced = False
 
     async def on_ready(self):
         if not self.synced:
             guild = discord.Object(id=GUILD_ID)
-            self.add_view(self.get_cog("ReactionRoles").persistent_view)  # will be set later
             await self.sync_commands(guild=guild)
             self.synced = True
         print(f"Logged in as {self.user} (ID: {self.user.id})")
-        print("------")
-
-    async def sync_commands(self, guild):
-        await self.sync_commands(guild=guild)
 
 bot = AdminBot()
 
 if __name__ == "__main__":
-    token = os.getenv("DISCORD_TOKEN")
-    if not token:
-        raise ValueError("DISCORD_TOKEN environment variable not set")
-    bot.run(token)
+    bot.run(TOKEN)
