@@ -3,7 +3,7 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.14.37111.16 d17.14
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{888888A0-9F3D-457C-B088-3A5042F75D52}") = "Sovereia", "DiscordBot\DiscordBot.pyproj", "{59E0AE47-3E92-4AA0-9A4A-DABF52ECA518}"
+Project("{888888A0-9F3D-457C-B088-3A5042F75D52}") = "discordbot", "discordbot.pyproj", "{59E0AE47-3E92-4AA0-9A4A-DABF52ECA518}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -18,6 +18,6 @@ Global
 		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
-		SolutionGuid = {1C87EBCD-52E6-4D39-874C-4CBE8A61ABE4}
+		SolutionGuid = {DDF40CD2-B452-4AF5-A04B-D5F491F8FB7F}
 	EndGlobalSection
 EndGlobal
