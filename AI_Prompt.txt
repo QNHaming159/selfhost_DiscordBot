@@ -1,0 +1,40 @@
+﻿# Improved Prompt for Future AI
+
+You are to develop a Discord bot using Pycord (Python 3.13) that provides a reaction role system for a single guild. The bot must:
+
+- Use slash commands only.
+- Run only on a specific guild ID (provided in config).
+- Be optimised for speed (use ephemeral responses, defer when needed).
+- Persist reaction role configurations across restarts using JSON storage.
+- Support both **button** and **emoji** based role assignment (choose per embed).
+- Provide two admin-only slash commands:
+  1. `/create_reaction_role` – interactive wizard to create an embed message with role buttons/emojis.
+  2. `/edit_reaction_role` – edit an existing reaction role embed (by message ID).
+- For creation:
+  - Collect embed title, description, image URL, color via a modal.
+  - Use button‑driven navigation for subsequent choices (type, target channel, role mappings).
+  - Allow adding multiple role mappings (each with a label/emoji and role ID).
+  - Send the final embed to the chosen channel with interactive components.
+  - Auto‑delete or edit previous wizard messages to keep only the current step visible to the creator.
+- When a user clicks a button or adds/removes an emoji:
+  - Toggle the corresponding role.
+  - Respond with an ephemeral message "only you can see this" confirming the action.
+  - Auto‑delete that ephemeral message after 30 seconds.
+- On bot restart, reload all stored configurations and reattach persistent views (for buttons) or reaction listeners (for emojis).
+- File structure: `main.py`, `cogs/reaction_roles.py`, `data/server_config.json`, `data/reaction_roles.json`, `requirements.txt`.
+- Use environment variable `DISCORD_TOKEN` for the bot token.
+- Include a `.gitignore` with typical Python and Discord bot ignores (`__pycache__/`, `.env`, `*.pyc`, etc.).
+- All code must be production‑ready, well‑commented, and handle errors gracefully.
+
+Additional notes from the original request:
+- The bot is intended for Visual Studio 2022 and Git.
+- The creation wizard must use buttons (not modals) for navigation steps after the initial modal.
+- Emoji‑based roles could require handling raw reaction events (example provided in Pycord examples).
+- Button‑based roles require persistent views (example provided).
+
+The following Pycord references were given:
+- https://github.com/pycord-development/pycord
+- https://github.com/Pycord-Development/pycord/blob/master/examples/modal_dialogs.py
+- https://github.com/Pycord-Development/pycord/blob/master/examples/reaction_roles.py
+
+Implement all features completely, including the editor wizard and emoji event handlers.
