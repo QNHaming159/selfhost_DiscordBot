@@ -143,34 +143,43 @@ def is_admin(interaction: discord.Interaction, admin_role_ids: List[int]) -> boo
 # -----------------------------------------------------------------------------
 
 class EmbedDetailsModal(Modal):
-    """Modal for collecting embed title (required), description, colour, image URL (optional)."""
     def __init__(self, current_data: Optional[dict] = None):
         super().__init__(title="Create Reaction Role Embed", custom_id="embed_modal")
         self.current_data = current_data or {}
 
+        # Title – always required, no special handling
         self.title_input = discord.ui.InputText(
             label="Embed Title (required)",
             style=discord.InputTextStyle.short,
             required=True,
             value=self.current_data.get("title", "")
         )
+
+        # Description – required, but user can type "skip" to leave empty
+        default_desc = self.current_data.get("description", "")
         self.description_input = discord.ui.InputText(
-            label="Embed Description (optional)",
+            label="Embed Description (type 'skip' for none)",
             style=discord.InputTextStyle.long,
-            required=False,
-            value=self.current_data.get("description", "")
+            required=True,
+            value=default_desc if default_desc else "skip"
         )
+
+        # Colour – required, type "skip" to use default
+        default_colour = self.current_data.get("colour", "")
         self.colour_input = discord.ui.InputText(
-            label="Colour (optional, name or hex, e.g. #2b2d31)",
+            label="Colour (type 'skip' for default)",
             style=discord.InputTextStyle.short,
-            required=False,
-            value=self.current_data.get("colour", "")
+            required=True,
+            value=default_colour if default_colour else "skip"
         )
+
+        # Image URL – required, type "skip" for no image
+        default_image = self.current_data.get("image_url", "")
         self.image_url_input = discord.ui.InputText(
-            label="Image URL (optional, will be embed image)",
+            label="Image URL (type 'skip' for none)",
             style=discord.InputTextStyle.short,
-            required=False,
-            value=self.current_data.get("image_url", "")
+            required=True,
+            value=default_image if default_image else "skip"
         )
 
         self.add_item(self.title_input)
@@ -179,12 +188,25 @@ class EmbedDetailsModal(Modal):
         self.add_item(self.image_url_input)
 
     async def callback(self, interaction: discord.Interaction):
+        # Convert "skip" (case‑insensitive) to None / empty string
+        description = self.description_input.value
+        if description.strip().lower() == "skip":
+            description = None
+
+        colour = self.colour_input.value
+        if colour.strip().lower() == "skip":
+            colour = ""
+
+        image_url = self.image_url_input.value
+        if image_url.strip().lower() == "skip":
+            image_url = None
+
         view: CreationWizard = self.view
         view.embed_data = {
             "title": self.title_input.value,
-            "description": self.description_input.value or None,
-            "colour": self.colour_input.value or "",
-            "image_url": self.image_url_input.value or None,
+            "description": description,
+            "colour": colour,
+            "image_url": image_url,
         }
         await view.show_type_selection(interaction)
 
@@ -442,7 +464,7 @@ class CreationWizard(View):
 
         embed = discord.Embed(
             title=self.embed_data.get("title"),
-            description=self.embed_data.get("description") or discord.Embed.Empty,
+            description=self.embed_data.get("description"),
             color=parse_color(self.embed_data.get("colour"))
         )
         if self.embed_data.get("image_url"):
