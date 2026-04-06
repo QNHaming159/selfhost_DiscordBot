@@ -1,47 +1,96 @@
+﻿#!/usr/bin/env python3
+"""
+Main entry point for the Discord Reaction Role Bot.
+Loads configuration, sets up the bot, and loads the reaction roles cog.
+"""
+
 import json
+import logging
+import sys
+from pathlib import Path
+
 import discord
-from discord.ext import commands
+from discord import Intents
 
-# Load single config file
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+logger = logging.getLogger("ReactionRoleBot")
+
+# Configuration file path
+CONFIG_FILE = Path("server_config.json")
+
 def load_config():
-    with open("data/server_config.json", "r") as f:
-        return json.load(f)
+    """Load or create the server configuration file."""
+    if not CONFIG_FILE.exists():
+        # Create default config and ask user to fill it
+        default_config = {
+            "discord_token": "",
+            "guild_id": 0,
+            "admin_role_ids": []
+        }
+        with open(CONFIG_FILE, "w") as f:
+            json.dump(default_config, f, indent=2)
+        logger.error(
+            "server_config.json created. Please fill in your discord_token, "
+            "guild_id, and admin_role_ids, then restart the bot."
+        )
+        sys.exit(1)
 
-config = load_config()
-TOKEN = config["discord_token"]
-GUILD_ID = config["guild_id"]
-ADMIN_ROLE_IDS = config["admin_role_ids"]
+    try:
+        with open(CONFIG_FILE, "r") as f:
+            config = json.load(f)
+    except json.JSONDecodeError as e:
+        logger.error(f"Failed to parse server_config.json: {e}")
+        sys.exit(1)
 
-# Admin check using loaded admin role IDs
-def is_admin():
-    async def predicate(ctx: discord.ApplicationContext):
-        if not ctx.guild:
-            return False
-        author_roles = [role.id for role in ctx.author.roles]
-        return any(role_id in author_roles for role_id in ADMIN_ROLE_IDS)
-    return commands.check(predicate)
+    # Validate required fields
+    if not config.get("discord_token"):
+        logger.error("discord_token missing or empty in server_config.json")
+        sys.exit(1)
+    if not config.get("guild_id"):
+        logger.error("guild_id missing or zero in server_config.json")
+        sys.exit(1)
 
-class AdminBot(commands.Bot):
-    def __init__(self):
-        intents = discord.Intents.default()
-        intents.message_content = True
-        intents.guilds = True
-        intents.members = True
-        intents.reactions = True
-        super().__init__(command_prefix="!", intents=intents)
+    return config
 
-    async def setup_hook(self):
-        await self.load_extension("cogs.reaction_roles")
-        self.synced = False
+def main():
+    config = load_config()
 
-    async def on_ready(self):
-        if not self.synced:
-            guild = discord.Object(id=GUILD_ID)
-            await self.sync_commands(guild=guild)
-            self.synced = True
-        print(f"Logged in as {self.user} (ID: {self.user.id})")
+    # Set up bot intents
+    intents = Intents.default()
+    intents.members = True          # Required to manage member roles
+    intents.reactions = True        # Required for reaction events
+    intents.message_content = True  # Optional, but helpful for debugging
 
-bot = AdminBot()
+    # Create bot with debug_guilds to restrict commands to a single guild
+    # This ensures slash commands are only registered for the specified guild
+    bot = discord.Bot(
+        intents=intents,
+        debug_guilds=[config["guild_id"]]  # Restrict commands to this guild only
+    )
+
+    @bot.event
+    async def on_ready():
+        logger.info(f"Bot ready: {bot.user} (ID: {bot.user.id})")
+        logger.info(f"Slash commands restricted to guild ID: {config['guild_id']}")
+
+    # Load the reaction roles cog
+    from cogs.reaction_roles import ReactionRoles
+    bot.add_cog(ReactionRoles(bot, config))
+
+    # Run the bot
+    try:
+        bot.run(config["discord_token"])
+    except discord.LoginFailure:
+        logger.error("Invalid Discord token. Please check server_config.json")
+        sys.exit(1)
+    except Exception as e:
+        logger.exception(f"Unexpected error while running bot: {e}")
+        sys.exit(1)
 
 if __name__ == "__main__":
-    bot.run(TOKEN)
+    main()

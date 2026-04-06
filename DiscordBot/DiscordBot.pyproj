@@ -13,6 +13,7 @@
     <Name>discordbot</Name>
     <RootNamespace>Sovereia</RootNamespace>
     <InterpreterId>MSBuild|.env|$(MSBuildProjectFullPath)</InterpreterId>
+    <SuppressPackageInstallationPrompt>True</SuppressPackageInstallationPrompt>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
     <DebugSymbols>true</DebugSymbols>
@@ -23,16 +24,20 @@
     <EnableUnmanagedDebugging>false</EnableUnmanagedDebugging>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="cogs\reaction_roles.py" />
+    <Compile Include="temp\reaction_roles_1.py" />
     <Compile Include="main.py" />
   </ItemGroup>
   <ItemGroup>
+    <Content Include="cogs\reaction_roles.py" />
+    <Content Include="temp\reaction_roles_old.py" />
+    <Content Include="temp\main_old.py" />
     <Content Include="requirements.txt" />
-    <Content Include="server_config.join.example" />
-    <Content Include="server_config.join" />
+    <Content Include="server_config.json.example" />
+    <Content Include="server_config.json" />
   </ItemGroup>
   <ItemGroup>
     <Folder Include="cogs\" />
+    <Folder Include="temp\" />
   </ItemGroup>
   <ItemGroup>
     <Interpreter Include=".env\">

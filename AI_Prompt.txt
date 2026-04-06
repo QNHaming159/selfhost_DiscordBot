@@ -1,42 +1,215 @@
-﻿# Improved Prompt for Future AI
+﻿# Improved AI Prompt – Discord Reaction Role Bot (Pycord)
 
-You are to develop a Discord bot using Pycord (Python 3.13) that provides a reaction role system for a single guild. The bot must:
+You are to develop a **single‑guild** Discord bot using **Pycord** (Python 3.13). The bot provides a reaction role system. Write production‑ready, well‑commented code with proper error handling and performance optimisations.
 
-- Use **slash commands only** – no prefix commands (`!`, `?`, etc.).
-- Run only on a specific guild ID (provided in config).
-- Be optimised for speed (use ephemeral responses, defer when needed).
-- Persist reaction role configurations across restarts using JSON storage.
-- Support both **button** and **emoji** based role assignment (choose per embed).
-- Provide two admin-only slash commands:
-  1. `/create_reaction_role` – interactive wizard to create an embed message with role buttons/emojis.
-  2. `/edit_reaction_role` – edit an existing reaction role embed (by message ID).
-- For creation:
-  - Collect embed title, description, image URL, color via a modal.
-  - Use button‑driven navigation for subsequent choices (type, target channel, role mappings).
-  - Allow adding multiple role mappings (each with a **label** for buttons, or an **emoji** for emoji type).
-  - Send the final embed to the chosen channel with interactive components.
-  - Auto‑delete or edit previous wizard messages to keep only the current step visible to the creator.
-- When a user clicks a button or adds/removes an emoji:
-  - Toggle the corresponding role.
-  - Respond with an ephemeral message "only you can see this" confirming the action.
-  - Auto‑delete that ephemeral message after 30 seconds.
-- On bot restart, reload all stored configurations and reattach persistent views (for buttons) or reaction listeners (for emojis).
-- All configuration (Discord token, guild ID, admin role IDs) is stored in **one file**: `data/server_config.json`.  
-  An example `data/server_config.example.json` is committed, and `server_config.json` is ignored by Git.
-- Include a `.gitignore` with typical Python and Discord bot ignores (`__pycache__/`, `.env`, `*.pyc`, etc.).
-- Support **multiple admin roles** (list of role IDs in config).
-- Provide a **data storage** (`reaction_roles.json`) that stores all necessary data to relink the embed after restart.
-- All code must be production‑ready, well‑commented, and handle errors gracefully.
+## General Constraints
 
-Additional notes from the original request:
-- The bot is intended for Visual Studio 2022 and Git.
-- The creation wizard must use buttons (not modals) for navigation steps after the initial modal.
-- Emoji‑based roles require handling raw reaction events (example provided in Pycord examples).
-- Button‑based roles require persistent views (example provided).
+- **Slash commands only** – no prefix commands (`!`, `?`, etc.).
+- **Single guild** – all commands and configurations are tied to one guild ID (provided in a config file).
+- **Optimised for speed** – use ephemeral responses, defer when needed, avoid blocking I/O.
+- **Persistent** – configurations survive restarts using JSON storage.
+- **Support both button‑based and emoji‑based role assignment** – the admin chooses per embed.
 
-The following Pycord references were given:
-- https://github.com/pycord-development/pycord
-- https://github.com/Pycord-Development/pycord/blob/master/examples/modal_dialogs.py
-- https://github.com/Pycord-Development/pycord/blob/master/examples/reaction_roles.py
+---
 
-Implement all features completely, including the editor wizard and emoji event handlers.
+## Configuration File (`server_config.json`)
+
+Located in the project root (next to `main.py`).  
+Example:
+
+```json
+{
+  "discord_token": "your_token_here",
+  "guild_id": 123456789012345678,
+  "admin_role_ids": [987654321098765432]
+}
+```
+
+If the file is missing, create it with default/empty values and prompt the user to fill it (via console) – do not crash.
+
+On startup, validate that the bot token and guild ID are present; if not, log an error and exit gracefully.
+
+Data Storage (data/reaction_roles.json)
+Store each reaction role message’s configuration.
+
+If the data/ directory or file does not exist, create them automatically.
+
+If the JSON file is corrupted, back it up (e.g., reaction_roles.json.corrupt.<timestamp>) and reset to an empty dictionary without crashing.
+
+Log only essential events (see “Logging” below).
+
+Slash Commands (Admin Only)
+Two admin‑only slash commands:
+
+/create_reaction_role – interactive wizard to create a new embed message with role buttons or emojis.
+
+/edit_reaction_role – edit an existing reaction role embed (by message ID).
+
+Both must check that the user has at least one of the roles listed in admin_role_ids from server_config.json. If not, respond with an ephemeral error and return.
+
+Creation Wizard Behaviour (/create_reaction_role)
+Step 1 – Modal
+Show a modal with the following fields:
+
+Embed title (optional; if empty, no title)
+
+Embed description (required)
+
+Embed colour (optional, accepts colour name or hex – default #2b2d31)
+
+Image URL (optional; if provided, show as embed image – not thumbnail)
+
+Step 2 – Choose type (buttons or emojis)
+After modal submission, send an ephemeral message with two buttons:
+
+🔘 Buttons
+
+😊 Emojis
+
+When clicked, edit the existing ephemeral message to reflect the choice and proceed to the next step.
+
+Step 3 – Choose target text channel
+After type selection, edit the ephemeral message to show a channel dropdown (only text channels).
+When selected, store the channel ID and proceed.
+
+Step 4 – Add role mappings
+Edit the ephemeral message again to show:
+
+A button “Add role mapping”
+
+A button “Finish”
+
+When “Add role mapping” is clicked:
+
+Show a modal with:
+
+Label (for buttons) or Emoji (for emoji‑based)
+
+Role (role dropdown or mention input – use role selector if possible)
+
+Button style (only if type == buttons; options: Primary, Secondary, Success, Danger)
+
+After modal submission, add the mapping to an internal list and edit the ephemeral message to show the current list of mappings (e.g., • Gamer – 🎮 – @GamerRole). Keep the “Add” and “Finish” buttons.
+
+The admin can add as many mappings as needed.
+When “Finish” is clicked, proceed to the final step.
+
+Step 5 – Create the message
+
+Build the embed with the collected data.
+
+If type is buttons, create a persistent view with one button per mapping.
+
+If type is emojis, send the embed and then add each emoji reaction (standard emoji or custom emoji).
+
+Send the final message to the chosen channel.
+
+Store the configuration in data/reaction_roles.json (key = message ID).
+
+Respond to the admin with an ephemeral confirmation containing the message ID and channel mention.
+
+All intermediate steps must edit the same ephemeral message (do not send new messages). Use a unique custom_id for the view to allow interaction updates.
+
+Edit Wizard Behaviour (/edit_reaction_role)
+Step 1 – Get message ID
+Prompt the user via ephemeral message to enter the message ID of an existing reaction role embed. Validate that the ID exists in storage. If not, show error and exit.
+
+Step 2 – Show current configuration
+Display the current embed data and mappings. Then offer edit options via buttons:
+
+Edit Embed – re‑open the modal (pre‑filled with current values) to change title, description, colour, image.
+
+Edit Mappings – show the list of mappings with options to add, remove, or change a mapping.
+
+Delete Message – delete the message and remove from storage (confirm first).
+
+After each edit, update the embed and view/reactions accordingly, and save changes to JSON.
+
+Interaction Handling (Role Toggle)
+For buttons (within a persistent view):
+
+Defer the interaction ephemerally.
+
+Add or remove the corresponding role.
+
+Send an ephemeral follow‑up confirming the action (e.g., “✅ Added role Gamer”).
+
+Auto‑delete that ephemeral message after 30 seconds (use delete_after=30).
+
+For emoji reactions (raw reaction events):
+
+Because ephemeral messages are impossible in reaction events, send a public message in the same channel saying {user} got/lost role {role}.
+
+Delete that message after 5 seconds (use delete_after=5). This is visible to everyone but very brief.
+
+Persistence & Startup
+On bot startup (after on_ready), load all stored configurations from data/reaction_roles.json.
+
+For each stored button‑based message:
+
+Fetch the message.
+
+Reattach the persistent view using the stored role data.
+
+If the message is missing or permissions insufficient, log a warning and skip.
+
+For emoji‑based messages, no view restoration needed – just ensure the reaction listeners are active (they are global).
+
+Log the number of successfully restored button messages.
+
+Logging & Error Handling
+Use Python’s logging module.
+
+Log only essential events at startup:
+
+Bot ready (one line).
+
+Number of slash commands synced (one line).
+
+Number of restored reaction role messages (one line).
+
+No per‑action logs (no “user clicked button”, etc.).
+
+All errors that could crash the bot should be caught and logged, but the bot must continue running.
+
+Performance Optimisations
+Memory caching: Load the JSON storage into a dict on startup; updates write to disk asynchronously (using asyncio.to_thread).
+
+Fast acknowledgment: Use await interaction.response.defer(ephemeral=True) at the start of any command that may take >2 seconds.
+
+Channel selection: Use discord.ui.ChannelSelect (native component) instead of manual loop.
+
+Parallel restoration: Use asyncio.gather to fetch and edit multiple button messages concurrently.
+
+Member caching: Use guild.get_member (cached) instead of fetch_member (API call) in reaction listeners.
+
+Example File Structure
+text
+project/
+├── main.py
+├── server_config.json
+├── data/
+│   └── reaction_roles.json
+├── cogs/
+│   └── reaction_roles.py
+└── requirements.txt
+main.py should:
+
+Load server_config.json.
+
+Set up the bot with intents (message content, members, reactions).
+
+Load the cog.
+
+Sync slash commands to the specified guild only (not globally).
+
+Run the bot.
+
+Deliverables
+Provide the complete code for:
+
+main.py
+
+cogs/reaction_roles.py
+
+requirements.txt (include py-cord and any other necessary packages)
