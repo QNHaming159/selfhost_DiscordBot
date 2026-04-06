@@ -7,13 +7,12 @@ import asyncio
 import json
 import logging
 import shutil
-import traceback
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Union
 
 import discord
-from discord import Option, SlashCommandOptionType
+from discord import Option
 from discord.ext import commands
 from discord.ui import Button, Modal, Select, View, ChannelSelect, RoleSelect
 
@@ -28,30 +27,22 @@ LOCK = asyncio.Lock()
 logger = logging.getLogger("ReactionRoleBot.cogs.ReactionRoles")
 
 def ensure_data_dir():
-    """Create data directory if it doesn't exist."""
     DATA_DIR.mkdir(exist_ok=True)
 
 def backup_corrupted_file(file_path: Path, suffix: str = "corrupt"):
-    """Create a timestamped backup of a corrupted JSON file."""
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     backup_path = file_path.with_name(f"{file_path.stem}.{suffix}.{timestamp}{file_path.suffix}")
     shutil.copy(file_path, backup_path)
     logger.warning(f"Corrupted file backed up to {backup_path}")
 
 async def load_storage() -> Dict[int, dict]:
-    """
-    Load reaction role configurations from JSON.
-    Returns a dict keyed by message ID (int).
-    """
     ensure_data_dir()
     if not DATA_FILE.exists():
         return {}
-
     try:
         loop = asyncio.get_running_loop()
         with open(DATA_FILE, "r") as f:
             data = await loop.run_in_executor(None, json.load, f)
-        # Convert string keys to int
         return {int(k): v for k, v in data.items()}
     except json.JSONDecodeError as e:
         logger.error(f"Corrupted reaction_roles.json: {e}")
@@ -62,9 +53,7 @@ async def load_storage() -> Dict[int, dict]:
         return {}
 
 async def save_storage(data: Dict[int, dict]):
-    """Asynchronously save reaction role configurations to JSON."""
     ensure_data_dir()
-    # Convert int keys to strings for JSON
     to_save = {str(k): v for k, v in data.items()}
     try:
         loop = asyncio.get_running_loop()
@@ -81,21 +70,13 @@ async def save_storage(data: Dict[int, dict]):
 # -----------------------------------------------------------------------------
 
 def parse_color(color_input: Optional[str]) -> discord.Color:
-    """
-    Parse a color name or hex string into a discord.Color.
-    Defaults to #2b2d31 (Discord dark embed colour) if invalid.
-    """
     if not color_input:
-        return discord.Color.from_rgb(43, 45, 49)  # #2b2d31
-
-    # Try hex
+        return discord.Color.from_rgb(43, 45, 49)
     if color_input.startswith("#"):
         try:
             return discord.Color.from_str(color_input)
         except ValueError:
             pass
-
-    # Try common colour names
     colour_map = {
         "default": discord.Color.default(),
         "red": discord.Color.red(),
@@ -132,36 +113,24 @@ def parse_color(color_input: Optional[str]) -> discord.Color:
         if isinstance(val, discord.Color):
             return val
         return discord.Color(val)
-
-    # If nothing works, return default
     return discord.Color.from_rgb(43, 45, 49)
 
 def emoji_to_string(emoji: Union[str, discord.Emoji, discord.PartialEmoji]) -> str:
-    """Convert a reaction emoji to a storable string representation."""
     if isinstance(emoji, str):
         return emoji
-    if isinstance(emoji, (discord.Emoji, discord.PartialEmoji)):
-        return str(emoji)  # Returns "<:name:id>" or "<a:name:id>"
     return str(emoji)
 
 def string_to_emoji(emoji_str: str) -> Union[str, discord.PartialEmoji]:
-    """
-    Convert a stored emoji string back to something usable for reaction addition.
-    Returns either a unicode string or a PartialEmoji.
-    """
-    # If it's a custom emoji format "<:name:id>" or "<a:name:id>"
     if emoji_str.startswith("<") and emoji_str.endswith(">"):
-        # Parse the emoji id
         animated = emoji_str.startswith("<a:")
         parts = emoji_str.split(":")
         if len(parts) >= 3:
             emoji_id = int(parts[-1].rstrip(">"))
-            name = parts[1] if not animated else parts[1][1:]  # Remove 'a' prefix
+            name = parts[1] if not animated else parts[1][1:]
             return discord.PartialEmoji(name=name, id=emoji_id, animated=animated)
-    return emoji_str  # unicode
+    return emoji_str
 
 def is_admin(interaction: discord.Interaction, admin_role_ids: List[int]) -> bool:
-    """Check if the interaction user has any of the admin roles."""
     if not interaction.guild:
         return False
     member = interaction.guild.get_member(interaction.user.id)
@@ -170,34 +139,34 @@ def is_admin(interaction: discord.Interaction, admin_role_ids: List[int]) -> boo
     return any(role.id in admin_role_ids for role in member.roles)
 
 # -----------------------------------------------------------------------------
-# Modals (only InputText components)
+# Modals (only InputText components) – Embed only
 # -----------------------------------------------------------------------------
 
 class EmbedDetailsModal(Modal):
-    """Modal for collecting embed title, description, colour, and image URL."""
+    """Modal for collecting embed title (required), description, colour, image URL (optional)."""
     def __init__(self, current_data: Optional[dict] = None):
         super().__init__(title="Create Reaction Role Embed", custom_id="embed_modal")
         self.current_data = current_data or {}
 
-        self.title_input = discord.ui.TextInput(
+        self.title_input = discord.ui.InputText(
             label="Embed Title (required)",
             style=discord.InputTextStyle.short,
-            required=True,                      # Only required field
+            required=True,
             value=self.current_data.get("title", "")
         )
-        self.description_input = discord.ui.TextInput(
+        self.description_input = discord.ui.InputText(
             label="Embed Description (optional)",
             style=discord.InputTextStyle.long,
-            required=False,                     # Explicitly optional
+            required=False,
             value=self.current_data.get("description", "")
         )
-        self.colour_input = discord.ui.TextInput(
+        self.colour_input = discord.ui.InputText(
             label="Colour (optional, name or hex, e.g. #2b2d31)",
             style=discord.InputTextStyle.short,
-            required=False,                     # Explicitly optional
+            required=False,
             value=self.current_data.get("colour", "")
         )
-        self.image_url_input = discord.ui.TextInput(
+        self.image_url_input = discord.ui.InputText(
             label="Image URL (optional, will be embed image)",
             style=discord.InputTextStyle.short,
             required=False,
@@ -219,66 +188,8 @@ class EmbedDetailsModal(Modal):
         }
         await view.show_type_selection(interaction)
 
-class LabelModal(Modal):
-    """Modal for collecting button label or emoji (text only)."""
-    def __init__(self, wizard_type: str, current_mapping: Optional[dict] = None):
-        self.wizard_type = wizard_type
-        self.current_mapping = current_mapping or {}
-        title = "Add Role Mapping" if not current_mapping else "Edit Role Mapping"
-        super().__init__(title=title, custom_id="label_modal")
-
-        if wizard_type == "buttons":
-            self.label_input = discord.ui.InputText(
-                label="Button Label",
-                style=discord.InputTextStyle.short,
-                required=True,
-                value=self.current_mapping.get("label", "")
-            )
-            self.add_item(self.label_input)
-        else:  # emojis
-            self.emoji_input = discord.ui.InputText(
-                label="Emoji (unicode or custom, e.g. 😀 or <:name:123>)",
-                style=discord.InputTextStyle.short,
-                required=True,
-                value=self.current_mapping.get("emoji", "")
-            )
-            self.add_item(self.emoji_input)
-
-    async def callback(self, interaction: discord.Interaction):
-        # After modal, we need to present role and style selectors in a separate view
-        view: CreationWizard = self.view
-        if self.wizard_type == "buttons":
-            label = self.label_input.value
-            # Create a temporary mapping with label, then ask for role and style
-            temp_mapping = {"label": label}
-            await self.present_role_and_style_selection(interaction, temp_mapping)
-        else:
-            emoji = self.emoji_input.value
-            temp_mapping = {"emoji": emoji}
-            await self.present_role_selection(interaction, temp_mapping)
-
-    async def present_role_and_style_selection(self, interaction: discord.Interaction, temp_mapping: dict):
-        """Send a view with role selector and style selector for buttons."""
-        view = RoleAndStyleSelectView(temp_mapping, self.view)
-        await interaction.response.send_message(
-            "Select the role and button style:",
-            ephemeral=True,
-            view=view,
-            delete_after=120
-        )
-
-    async def present_role_selection(self, interaction: discord.Interaction, temp_mapping: dict):
-        """Send a view with role selector only (for emojis)."""
-        view = RoleSelectView(temp_mapping, self.view)
-        await interaction.response.send_message(
-            "Select the role:",
-            ephemeral=True,
-            view=view,
-            delete_after=120
-        )
-
 # -----------------------------------------------------------------------------
-# Selection Views (for role and style)
+# Selection Views (for role and style) – used after chat input
 # -----------------------------------------------------------------------------
 
 class RoleAndStyleSelectView(View):
@@ -288,16 +199,15 @@ class RoleAndStyleSelectView(View):
         self.temp_mapping = temp_mapping
         self.wizard_view = wizard_view
 
-        # Role select
         self.role_select = RoleSelect(
             placeholder="Select a role",
             min_values=1,
             max_values=1,
             custom_id="role_select"
         )
+        self.role_select.callback = self.role_select_callback   # ADD THIS
         self.add_item(self.role_select)
 
-        # Style select (buttons)
         style_options = [
             discord.SelectOption(label="Primary", value="primary", emoji="🔵"),
             discord.SelectOption(label="Secondary", value="secondary", emoji="⚪"),
@@ -309,14 +219,23 @@ class RoleAndStyleSelectView(View):
             options=style_options,
             custom_id="style_select"
         )
+        self.style_select.callback = self.style_select_callback   # ADD THIS
         self.add_item(self.style_select)
 
-        # Confirm button
         confirm = Button(label="Confirm", style=discord.ButtonStyle.success, custom_id="confirm")
         confirm.callback = self.confirm_callback
         self.add_item(confirm)
 
+    async def role_select_callback(self, interaction: discord.Interaction):
+        """Acknowledge the role selection without doing anything."""
+        await interaction.response.defer()
+
+    async def style_select_callback(self, interaction: discord.Interaction):
+        """Acknowledge the style selection without doing anything."""
+        await interaction.response.defer()
+
     async def confirm_callback(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
         role = self.role_select.values[0]
         style_name = self.style_select.values[0]
         style_map = {
@@ -329,8 +248,9 @@ class RoleAndStyleSelectView(View):
         self.temp_mapping["style"] = style_name.capitalize()
         self.temp_mapping["style_value"] = style_map[style_name]
         self.wizard_view.mappings.append(self.temp_mapping)
-        await interaction.response.edit_message(content="Mapping added!", view=None, delete_after=2)
-        await self.wizard_view.refresh_mapping_display(interaction)
+        await interaction.edit_original_response(content="✅ Mapping added!", view=None, delete_after=2)
+        await self.wizard_view.refresh_main_wizard_message()
+
 
 class RoleSelectView(View):
     """View for selecting a role (for emoji-based mappings)."""
@@ -345,18 +265,24 @@ class RoleSelectView(View):
             max_values=1,
             custom_id="role_select"
         )
+        self.role_select.callback = self.role_select_callback   # ADD THIS
         self.add_item(self.role_select)
 
         confirm = Button(label="Confirm", style=discord.ButtonStyle.success, custom_id="confirm")
         confirm.callback = self.confirm_callback
         self.add_item(confirm)
 
+    async def role_select_callback(self, interaction: discord.Interaction):
+        """Acknowledge the role selection without doing anything."""
+        await interaction.response.defer()
+
     async def confirm_callback(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
         role = self.role_select.values[0]
         self.temp_mapping["role_id"] = role.id
         self.wizard_view.mappings.append(self.temp_mapping)
-        await interaction.response.edit_message(content="Mapping added!", view=None, delete_after=2)
-        await self.wizard_view.refresh_mapping_display(interaction)
+        await interaction.edit_original_response(content="✅ Mapping added!", view=None, delete_after=2)
+        await self.wizard_view.refresh_main_wizard_message()
 
 # -----------------------------------------------------------------------------
 # Wizard Views
@@ -408,7 +334,6 @@ class CreationWizard(View):
         )
         channel_select.callback = self.channel_selected
         self.add_item(channel_select)
-
         await interaction.response.edit_message(content="Select the target text channel:", view=self)
 
     async def channel_selected(self, interaction: discord.Interaction):
@@ -426,7 +351,6 @@ class CreationWizard(View):
         self.add_item(add_btn)
         self.add_item(finish_btn)
 
-        # Build mapping list display
         content = "**Current role mappings:**\n"
         if not self.mappings:
             content += "*No mappings added yet.*\n"
@@ -435,24 +359,73 @@ class CreationWizard(View):
                 if self.wizard_type == "buttons":
                     content += f"{idx}. `{m['label']}` → <@&{m['role_id']}> (style: {m.get('style', 'Primary')})\n"
                 else:
-                    emoji_display = m['emoji']
-                    content += f"{idx}. {emoji_display} → <@&{m['role_id']}>\n"
+                    content += f"{idx}. {m['emoji']} → <@&{m['role_id']}>\n"
         content += "\nPress **Add role mapping** to add another, or **Finish** to create the message."
 
         await interaction.response.edit_message(content=content, view=self)
 
     async def add_mapping_callback(self, interaction: discord.Interaction):
-        """Open modal for label/emoji input (role and style will follow)."""
-        if self.wizard_type == "buttons":
-            modal = LabelModal("buttons")
-        else:
-            modal = LabelModal("emojis")
-        modal.view = self
-        await interaction.response.send_modal(modal)
+        """Ask for button label or emoji via chat message (no modal)."""
+        prompt = "Please type the button label (for button type) or emoji (for emoji type) in the chat. You have 60 seconds."
+        await interaction.response.send_message(prompt, ephemeral=True, delete_after=60)
+        prompt_msg = await interaction.original_response()
 
-    async def refresh_mapping_display(self, interaction: discord.Interaction):
-        """Refresh the mapping display after adding a mapping."""
-        await self.show_mapping_controls(interaction)
+        def check(msg: discord.Message):
+            return msg.author.id == interaction.user.id and msg.channel.id == interaction.channel.id
+
+        try:
+            msg = await self.cog.bot.wait_for('message', timeout=60.0, check=check)
+        except asyncio.TimeoutError:
+            await prompt_msg.delete()
+            await interaction.followup.send("Timed out. Please start over.", ephemeral=True, delete_after=10)
+            return
+
+        await msg.delete()
+        await prompt_msg.delete()
+        user_input = msg.content.strip()
+        if not user_input:
+            await interaction.followup.send("Empty input. Please try again.", ephemeral=True, delete_after=10)
+            return
+
+        if self.wizard_type == "buttons":
+            temp_mapping = {"label": user_input}
+            await self.present_role_and_style_selection(interaction, temp_mapping)
+        else:
+            temp_mapping = {"emoji": user_input}
+            await self.present_role_selection(interaction, temp_mapping)
+
+    async def present_role_and_style_selection(self, interaction: discord.Interaction, temp_mapping: dict):
+        view = RoleAndStyleSelectView(temp_mapping, self)
+        await interaction.followup.send("Select the role and button style:", ephemeral=True, view=view, delete_after=120)
+
+    async def present_role_selection(self, interaction: discord.Interaction, temp_mapping: dict):
+        view = RoleSelectView(temp_mapping, self)
+        await interaction.followup.send("Select the role:", ephemeral=True, view=view, delete_after=120)
+
+    async def refresh_main_wizard_message(self):
+        """Update the main wizard message (the one showing current mappings)."""
+        if not self.current_message:
+            return
+        self.clear_items()
+        add_btn = Button(label="Add role mapping", style=discord.ButtonStyle.success, emoji="➕", custom_id="add_mapping")
+        finish_btn = Button(label="Finish", style=discord.ButtonStyle.primary, emoji="✅", custom_id="finish")
+        add_btn.callback = self.add_mapping_callback
+        finish_btn.callback = self.finish_callback
+        self.add_item(add_btn)
+        self.add_item(finish_btn)
+
+        content = "**Current role mappings:**\n"
+        if not self.mappings:
+            content += "*No mappings added yet.*\n"
+        else:
+            for idx, m in enumerate(self.mappings, 1):
+                if self.wizard_type == "buttons":
+                    content += f"{idx}. `{m['label']}` → <@&{m['role_id']}> (style: {m.get('style', 'Primary')})\n"
+                else:
+                    content += f"{idx}. {m['emoji']} → <@&{m['role_id']}>\n"
+        content += "\nPress **Add role mapping** to add another, or **Finish** to create the message."
+
+        await self.current_message.edit(content=content, view=self)
 
     async def finish_callback(self, interaction: discord.Interaction):
         """Step 5: Create the final embed message in the selected channel."""
@@ -460,7 +433,6 @@ class CreationWizard(View):
             await interaction.response.send_message("You must add at least one role mapping.", ephemeral=True, delete_after=10)
             return
 
-        # Defer to avoid timeout
         await interaction.response.defer(ephemeral=True)
 
         channel = self.original_interaction.guild.get_channel(self.channel_id)
@@ -468,10 +440,9 @@ class CreationWizard(View):
             await interaction.followup.send("Invalid channel selected.", ephemeral=True, delete_after=10)
             return
 
-        # Build embed
         embed = discord.Embed(
             title=self.embed_data.get("title"),
-            description=self.embed_data["description"] or discord.Embed.Empty,
+            description=self.embed_data.get("description") or discord.Embed.Empty,
             color=parse_color(self.embed_data.get("colour"))
         )
         if self.embed_data.get("image_url"):
@@ -479,12 +450,10 @@ class CreationWizard(View):
 
         try:
             if self.wizard_type == "buttons":
-                # Create persistent view with buttons
                 view = RoleButtonsView(self.cog, self.mappings, self.original_interaction.guild_id)
                 message = await channel.send(embed=embed, view=view)
-            else:  # emojis
+            else:
                 message = await channel.send(embed=embed)
-                # Add reactions
                 for mapping in self.mappings:
                     emoji = string_to_emoji(mapping["emoji"])
                     try:
@@ -492,16 +461,13 @@ class CreationWizard(View):
                     except Exception as e:
                         logger.warning(f"Failed to add reaction {emoji}: {e}")
         except discord.Forbidden:
-            await interaction.followup.send(
-                f"Missing permissions to send or manage messages in {channel.mention}.", ephemeral=True
-            )
+            await interaction.followup.send(f"Missing permissions to send or manage messages in {channel.mention}.", ephemeral=True)
             return
         except Exception as e:
             logger.exception(f"Failed to send reaction role message: {e}")
             await interaction.followup.send("An unexpected error occurred while sending the message.", ephemeral=True)
             return
 
-        # Store configuration
         config = {
             "type": self.wizard_type,
             "channel_id": channel.id,
@@ -511,7 +477,6 @@ class CreationWizard(View):
         self.cog.configs[message.id] = config
         await save_storage(self.cog.configs)
 
-        # Confirm to admin
         await interaction.followup.send(
             f"✅ Reaction role message created in {channel.mention} (ID: {message.id})",
             ephemeral=True, delete_after=30
@@ -521,7 +486,7 @@ class CreationWizard(View):
 class RoleButtonsView(View):
     """Persistent view for button-based reaction roles."""
     def __init__(self, cog, mappings: List[dict], guild_id: int):
-        super().__init__(timeout=None)  # Persistent
+        super().__init__(timeout=None)
         self.cog = cog
         self.guild_id = guild_id
         for mapping in mappings:
@@ -540,28 +505,21 @@ class RoleButtonsView(View):
             if not guild:
                 await interaction.followup.send("Error: guild not found.", ephemeral=True, delete_after=10)
                 return
-
             member = guild.get_member(interaction.user.id)
             if not member:
                 await interaction.followup.send("Error: member not found.", ephemeral=True, delete_after=10)
                 return
-
             role = guild.get_role(role_id)
             if not role:
                 await interaction.followup.send("Role no longer exists.", ephemeral=True, delete_after=10)
                 return
-
-            # Toggle role
             if role in member.roles:
                 await member.remove_roles(role, reason="Reaction role button")
                 action = "removed from"
             else:
                 await member.add_roles(role, reason="Reaction role button")
                 action = "added to"
-
-            await interaction.followup.send(
-                f"✅ {action} {role.mention}", ephemeral=True, delete_after=30
-            )
+            await interaction.followup.send(f"✅ {action} {role.mention}", ephemeral=True, delete_after=30)
         return callback
 
 class EditWizard(View):
@@ -590,19 +548,15 @@ class EditWizard(View):
             await self.delete_message(interaction)
 
     async def edit_embed(self, interaction: discord.Interaction):
-        """Show modal prefilled with current embed data."""
         modal = EmbedDetailsModal(current_data=self.config.get("embed", {}))
         modal.view = self
         await interaction.response.send_modal(modal)
 
     async def edit_mappings(self, interaction: discord.Interaction):
-        """Show mapping management view."""
         view = MappingManageView(self.cog, self.message_id, self.config, self.original_interaction)
         await interaction.response.send_message("Manage role mappings:", view=view, ephemeral=True)
 
     async def delete_message(self, interaction: discord.Interaction):
-        """Delete the reaction role message and remove from storage."""
-        # Confirm
         confirm_view = ConfirmDeleteView(self)
         await interaction.response.send_message(
             f"⚠️ Are you sure you want to delete reaction role message {self.message_id}?",
@@ -610,16 +564,14 @@ class EditWizard(View):
         )
 
     async def apply_embed_edit(self, interaction: discord.Interaction, embed_data: dict):
-        """Update the embed and optionally the stored config."""
         self.config["embed"] = embed_data
-        # Update the actual message
         channel = self.original_interaction.guild.get_channel(self.config["channel_id"])
         if channel:
             try:
                 msg = await channel.fetch_message(self.message_id)
                 embed = discord.Embed(
                     title=embed_data.get("title"),
-                    description=embed_data["description"] or discord.Embed.Empty,
+                    description=embed_data.get("description") or discord.Embed.Empty,
                     color=parse_color(embed_data.get("colour"))
                 )
                 if embed_data.get("image_url"):
@@ -627,13 +579,11 @@ class EditWizard(View):
                 await msg.edit(embed=embed)
             except Exception as e:
                 logger.warning(f"Failed to edit embed message: {e}")
-        # Save config
         self.cog.configs[self.message_id] = self.config
         await save_storage(self.cog.configs)
         await interaction.response.edit_message(content="✅ Embed updated.", view=None, delete_after=5)
 
     async def finalize_deletion(self, interaction: discord.Interaction):
-        """Actually delete the message and remove config."""
         channel = self.original_interaction.guild.get_channel(self.config["channel_id"])
         if channel:
             try:
@@ -641,7 +591,6 @@ class EditWizard(View):
                 await msg.delete()
             except Exception as e:
                 logger.warning(f"Failed to delete message {self.message_id}: {e}")
-        # Remove from storage
         self.cog.configs.pop(self.message_id, None)
         await save_storage(self.cog.configs)
         await interaction.response.edit_message(content="✅ Message deleted and configuration removed.", view=None, delete_after=10)
@@ -665,7 +614,7 @@ class ConfirmDeleteView(View):
         await interaction.response.edit_message(content="Deletion cancelled.", view=None, delete_after=5)
 
 class MappingManageView(View):
-    """View to add, remove, or edit mappings."""
+    """View to add, remove, or edit mappings (for editing existing messages)."""
     def __init__(self, cog, message_id: int, config: dict, original_interaction: discord.Interaction):
         super().__init__(timeout=120)
         self.cog = cog
@@ -680,7 +629,6 @@ class MappingManageView(View):
         add_btn.callback = self.add_mapping
         self.add_item(add_btn)
 
-        # List existing mappings with remove/edit buttons
         for idx, mapping in enumerate(self.config["mappings"]):
             label = mapping.get("label") or mapping.get("emoji", "?")
             edit_btn = Button(label=f"Edit {label}", style=discord.ButtonStyle.secondary, custom_id=f"edit_{idx}")
@@ -696,15 +644,37 @@ class MappingManageView(View):
 
     def create_edit_callback(self, idx: int):
         async def callback(interaction: discord.Interaction):
-            mapping = self.config["mappings"][idx]
             wizard_type = self.config["type"]
-            # For editing, we need to collect new label/emoji and then role/style again.
-            # Simplified: we'll just remove and re-add? Better to open a modal then role/style.
-            # We'll create a modal for label/emoji, then after that, role/style selection.
-            modal = LabelModal(wizard_type, current_mapping=mapping)
-            modal.view = self
+            prompt = "Please type the new button label or emoji in the chat. You have 60 seconds."
+            await interaction.response.send_message(prompt, ephemeral=True, delete_after=60)
+            prompt_msg = await interaction.original_response()
+
+            def check(msg: discord.Message):
+                return msg.author.id == interaction.user.id and msg.channel.id == interaction.channel.id
+
+            try:
+                msg = await self.cog.bot.wait_for('message', timeout=60.0, check=check)
+            except asyncio.TimeoutError:
+                await prompt_msg.delete()
+                await interaction.followup.send("Timed out.", ephemeral=True, delete_after=10)
+                return
+            await msg.delete()
+            await prompt_msg.delete()
+            user_input = msg.content.strip()
+            if not user_input:
+                await interaction.followup.send("Empty input.", ephemeral=True, delete_after=10)
+                return
+
+            if wizard_type == "buttons":
+                temp_mapping = {"label": user_input}
+                view = RoleAndStyleSelectView(temp_mapping, self)
+                await interaction.followup.send("Select the role and button style:", ephemeral=True, view=view, delete_after=120)
+            else:
+                temp_mapping = {"emoji": user_input}
+                view = RoleSelectView(temp_mapping, self)
+                await interaction.followup.send("Select the role:", ephemeral=True, view=view, delete_after=120)
+
             self.editing_index = idx
-            await interaction.response.send_modal(modal)
         return callback
 
     def create_remove_callback(self, idx: int):
@@ -715,21 +685,43 @@ class MappingManageView(View):
 
     async def add_mapping(self, interaction: discord.Interaction):
         wizard_type = self.config["type"]
-        modal = LabelModal(wizard_type)
-        modal.view = self
-        await interaction.response.send_modal(modal)
+        prompt = "Please type the button label or emoji in the chat. You have 60 seconds."
+        await interaction.response.send_message(prompt, ephemeral=True, delete_after=60)
+        prompt_msg = await interaction.original_response()
+
+        def check(msg: discord.Message):
+            return msg.author.id == interaction.user.id and msg.channel.id == interaction.channel.id
+
+        try:
+            msg = await self.cog.bot.wait_for('message', timeout=60.0, check=check)
+        except asyncio.TimeoutError:
+            await prompt_msg.delete()
+            await interaction.followup.send("Timed out.", ephemeral=True, delete_after=10)
+            return
+        await msg.delete()
+        await prompt_msg.delete()
+        user_input = msg.content.strip()
+        if not user_input:
+            await interaction.followup.send("Empty input.", ephemeral=True, delete_after=10)
+            return
+
+        if wizard_type == "buttons":
+            temp_mapping = {"label": user_input}
+            view = RoleAndStyleSelectView(temp_mapping, self)
+            await interaction.followup.send("Select the role and button style:", ephemeral=True, view=view, delete_after=120)
+        else:
+            temp_mapping = {"emoji": user_input}
+            view = RoleSelectView(temp_mapping, self)
+            await interaction.followup.send("Select the role:", ephemeral=True, view=view, delete_after=120)
 
     async def save_and_refresh(self, interaction: discord.Interaction):
-        # Update actual message
         await self.update_actual_message()
-        # Save storage
         self.cog.configs[self.message_id] = self.config
         await save_storage(self.cog.configs)
         self.refresh_display()
         await interaction.response.edit_message(content="Mappings updated.", view=self)
 
     async def update_actual_message(self):
-        """Recreate the view or reactions on the original message."""
         channel = self.original_interaction.guild.get_channel(self.config["channel_id"])
         if not channel:
             return
@@ -738,8 +730,7 @@ class MappingManageView(View):
             if self.config["type"] == "buttons":
                 new_view = RoleButtonsView(self.cog, self.config["mappings"], self.original_interaction.guild_id)
                 await msg.edit(view=new_view)
-            else:  # emojis
-                # Clear existing reactions and re-add
+            else:
                 await msg.clear_reactions()
                 for mapping in self.config["mappings"]:
                     emoji = string_to_emoji(mapping["emoji"])
@@ -771,22 +762,18 @@ class ReactionRoles(commands.Cog):
         logger.info(f"Restored {len([c for c in self.configs.values() if c['type'] == 'buttons'])} button-based reaction messages")
 
     async def restore_button_messages(self):
-        """Reattach persistent views to all button-based messages."""
         guild = self.bot.get_guild(self.guild_id)
         if not guild:
             logger.error(f"Guild {self.guild_id} not found. Cannot restore button messages.")
             return
-
         tasks = []
         for msg_id, config in self.configs.items():
             if config["type"] == "buttons":
                 tasks.append(self.restore_single_button_message(guild, msg_id, config))
-
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
 
     async def restore_single_button_message(self, guild: discord.Guild, msg_id: int, config: dict):
-        """Fetch a single message and reattach the view."""
         channel = guild.get_channel(config["channel_id"])
         if not channel or not isinstance(channel, discord.TextChannel):
             logger.warning(f"Channel {config['channel_id']} for message {msg_id} not found or invalid.")
@@ -804,17 +791,11 @@ class ReactionRoles(commands.Cog):
         except Exception as e:
             logger.warning(f"Failed to restore button message {msg_id}: {e}")
 
-    # -------------------------------------------------------------------------
-    # Slash Commands
-    # -------------------------------------------------------------------------
     @discord.slash_command(name="create_reaction_role", description="Create a new reaction role embed (admin only)")
     async def create_reaction_role(self, ctx: discord.ApplicationContext):
-        """Admin-only interactive wizard to create a reaction role message."""
         if not is_admin(ctx, self.admin_role_ids):
             await ctx.respond("You don't have permission to use this command.", ephemeral=True, delete_after=10)
             return
-
-        # Step 1: Show modal for embed details
         modal = EmbedDetailsModal()
         view = CreationWizard(self, ctx, {})
         modal.view = view
@@ -823,28 +804,21 @@ class ReactionRoles(commands.Cog):
     @discord.slash_command(name="edit_reaction_role", description="Edit an existing reaction role embed (admin only)")
     async def edit_reaction_role(self, ctx: discord.ApplicationContext,
                                  message_id: Option(str, "The message ID of the reaction role embed", required=True)):
-        """Edit an existing reaction role message."""
         if not is_admin(ctx, self.admin_role_ids):
             await ctx.respond("You don't have permission to use this command.", ephemeral=True, delete_after=10)
             return
-
         try:
             msg_id = int(message_id)
         except ValueError:
             await ctx.respond("Invalid message ID. Please enter a numeric ID.", ephemeral=True, delete_after=10)
             return
-
         config = self.configs.get(msg_id)
         if not config:
             await ctx.respond(f"No reaction role configuration found for message ID {msg_id}.", ephemeral=True, delete_after=10)
             return
-
         view = EditWizard(self, ctx, msg_id, config)
         await ctx.respond(f"Editing reaction role message {msg_id}. Choose an option:", view=view, ephemeral=True)
 
-    # -------------------------------------------------------------------------
-    # Reaction Event Handlers (for emoji-based roles)
-    # -------------------------------------------------------------------------
     @commands.Cog.listener()
     async def on_raw_reaction_add(self, payload: discord.RawReactionActionEvent):
         await self.handle_reaction(payload, add=True)
@@ -854,53 +828,41 @@ class ReactionRoles(commands.Cog):
         await self.handle_reaction(payload, add=False)
 
     async def handle_reaction(self, payload: discord.RawReactionActionEvent, add: bool):
-        """Handle emoji reaction add/remove for role assignment."""
         if payload.user_id == self.bot.user.id:
             return
-
         config = self.configs.get(payload.message_id)
         if not config or config["type"] != "emojis":
             return
-
         guild = self.bot.get_guild(payload.guild_id)
         if not guild:
             return
-
         member = guild.get_member(payload.user_id)
         if not member:
             return
-
-        # Find mapping that matches the emoji
-        reaction_emoji = str(payload.emoji)  # converts custom to "<:name:id>"
+        reaction_emoji = str(payload.emoji)
         matching_mapping = None
         for mapping in config["mappings"]:
-            stored_emoji = mapping["emoji"]
-            if stored_emoji == reaction_emoji:
+            if mapping["emoji"] == reaction_emoji:
                 matching_mapping = mapping
                 break
-
         if not matching_mapping:
             return
-
         role = guild.get_role(matching_mapping["role_id"])
         if not role:
             return
-
         try:
             if add:
                 if role not in member.roles:
                     await member.add_roles(role, reason="Reaction role (emoji)")
                     action_text = f"✅ {member.display_name} got role {role.name}"
                 else:
-                    return  # Already has role
+                    return
             else:
                 if role in member.roles:
                     await member.remove_roles(role, reason="Reaction role (emoji)")
                     action_text = f"❌ {member.display_name} lost role {role.name}"
                 else:
                     return
-
-            # Send a public message that self-destructs after 5 seconds
             channel = self.bot.get_channel(payload.channel_id)
             if channel and isinstance(channel, discord.TextChannel):
                 await channel.send(action_text, delete_after=5)

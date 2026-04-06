@@ -1,30 +1,26 @@
-﻿# Improved AI Prompt – Discord Reaction Role Bot (Pycord)
+﻿You are to develop a single‑guild Discord bot using Pycord (Python 3.13). The bot provides a reaction role system. Write production‑ready, well‑commented code with proper error handling and performance optimisations.
 
-You are to develop a **single‑guild** Discord bot using **Pycord** (Python 3.13). The bot provides a reaction role system. Write production‑ready, well‑commented code with proper error handling and performance optimisations.
+General Constraints
+Slash commands only – no prefix commands (!, ?, etc.).
 
-## General Constraints
+Single guild – all commands and configurations are tied to one guild ID (provided in a config file).
 
-- **Slash commands only** – no prefix commands (`!`, `?`, etc.).
-- **Single guild** – all commands and configurations are tied to one guild ID (provided in a config file).
-- **Optimised for speed** – use ephemeral responses, defer when needed, avoid blocking I/O.
-- **Persistent** – configurations survive restarts using JSON storage.
-- **Support both button‑based and emoji‑based role assignment** – the admin chooses per embed.
+Optimised for speed – use ephemeral responses, defer when needed, avoid blocking I/O.
 
----
+Persistent – configurations survive restarts using JSON storage.
 
-## Configuration File (`server_config.json`)
+Support both button‑based and emoji‑based role assignment – the admin chooses per embed.
 
-Located in the project root (next to `main.py`).  
+Configuration File (server_config.json)
+Located in the project root (next to main.py).
 Example:
 
-```json
+json
 {
   "discord_token": "your_token_here",
   "guild_id": 123456789012345678,
   "admin_role_ids": [987654321098765432]
 }
-```
-
 If the file is missing, create it with default/empty values and prompt the user to fill it (via console) – do not crash.
 
 On startup, validate that the bot token and guild ID are present; if not, log an error and exit gracefully.
@@ -48,16 +44,18 @@ Two admin‑only slash commands:
 Both must check that the user has at least one of the roles listed in admin_role_ids from server_config.json. If not, respond with an ephemeral error and return.
 
 Creation Wizard Behaviour (/create_reaction_role)
-Step 1 – Modal
+Step 1 – Modal (only for embed details)
 Show a modal with the following fields:
 
-Embed title (optional; if empty, no title)
+Embed Title – required.
 
-Embed description (required)
+Embed Description – optional (if empty, embed has no description).
 
-Embed colour (optional, accepts colour name or hex – default #2b2d31)
+Embed Colour – optional (accepts colour name or hex; default #2b2d31).
 
-Image URL (optional; if provided, show as embed image – not thumbnail)
+Image URL – optional (embed image, not thumbnail).
+
+After modal submission, proceed to Step 2.
 
 Step 2 – Choose type (buttons or emojis)
 After modal submission, send an ephemeral message with two buttons:
@@ -66,13 +64,13 @@ After modal submission, send an ephemeral message with two buttons:
 
 😊 Emojis
 
-When clicked, edit the existing ephemeral message to reflect the choice and proceed to the next step.
+When clicked, edit the ephemeral message to reflect the choice and proceed to Step 3.
 
 Step 3 – Choose target text channel
-After type selection, edit the ephemeral message to show a channel dropdown (only text channels).
+Edit the ephemeral message to show a ChannelSelect (only text channels).
 When selected, store the channel ID and proceed.
 
-Step 4 – Add role mappings
+Step 4 – Add role mappings (chat‑based input, not a modal)
 Edit the ephemeral message again to show:
 
 A button “Add role mapping”
@@ -81,26 +79,44 @@ A button “Finish”
 
 When “Add role mapping” is clicked:
 
-Show a modal with:
+Send an ephemeral prompt in the chat: “Please type the button label (for buttons) or emoji (for emojis) in the chat. You have 60 seconds.”
 
-Label (for buttons) or Emoji (for emoji‑based)
+Store that prompt message, then wait for the admin’s text message (using bot.wait_for('message')).
 
-Role (role dropdown or mention input – use role selector if possible)
+Delete the admin’s typed message and the bot’s prompt message.
 
-Button style (only if type == buttons; options: Primary, Secondary, Success, Danger)
+After receiving the text, send a new ephemeral message containing:
 
-After modal submission, add the mapping to an internal list and edit the ephemeral message to show the current list of mappings (e.g., • Gamer – 🎮 – @GamerRole). Keep the “Add” and “Finish” buttons.
+A role dropdown (RoleSelect) – always present.
+
+For button type, also a style dropdown (Select with options Primary, Secondary, Success, Danger).
+
+A “Confirm” button.
+
+Crucially, both dropdowns must have empty callback methods that simply await interaction.response.defer() to acknowledge the interaction and avoid “This interaction failed” errors.
+
+When “Confirm” is clicked:
+
+Defer the interaction ephemerally.
+
+Read the selected role and (if applicable) style.
+
+Add the mapping to an internal list.
+
+Edit the selection message to “✅ Mapping added!” and close it.
+
+Edit the main wizard ephemeral message (the one showing current mappings) to reflect the new mapping.
 
 The admin can add as many mappings as needed.
-When “Finish” is clicked, proceed to the final step.
+
+When “Finish” is clicked, proceed to Step 5.
 
 Step 5 – Create the message
+Build the embed with the collected data (title required, description optional).
 
-Build the embed with the collected data.
+If type is buttons, create a persistent view with one button per mapping. Each button toggles the corresponding role.
 
-If type is buttons, create a persistent view with one button per mapping.
-
-If type is emojis, send the embed and then add each emoji reaction (standard emoji or custom emoji).
+If type is emojis, send the embed and then add each emoji reaction (standard or custom).
 
 Send the final message to the chosen channel.
 
@@ -108,39 +124,35 @@ Store the configuration in data/reaction_roles.json (key = message ID).
 
 Respond to the admin with an ephemeral confirmation containing the message ID and channel mention.
 
-All intermediate steps must edit the same ephemeral message (do not send new messages). Use a unique custom_id for the view to allow interaction updates.
+Important: All intermediate steps must edit the same ephemeral message (except the temporary selection views). Use a unique custom_id for the main wizard view.
 
 Edit Wizard Behaviour (/edit_reaction_role)
-Step 1 – Get message ID
 Prompt the user via ephemeral message to enter the message ID of an existing reaction role embed. Validate that the ID exists in storage. If not, show error and exit.
 
-Step 2 – Show current configuration
-Display the current embed data and mappings. Then offer edit options via buttons:
+Display the current embed data and mappings. Offer edit options via buttons:
 
-Edit Embed – re‑open the modal (pre‑filled with current values) to change title, description, colour, image.
+Edit Embed – re‑open the embed modal (pre‑filled with current values) to change title, description, colour, image.
 
-Edit Mappings – show the list of mappings with options to add, remove, or change a mapping.
+Edit Mappings – show the list of mappings with options to add, remove, or edit a mapping. Adding/editing uses the same chat‑based input flow as the creation wizard.
 
 Delete Message – delete the message and remove from storage (confirm first).
 
 After each edit, update the embed and view/reactions accordingly, and save changes to JSON.
 
 Interaction Handling (Role Toggle)
-For buttons (within a persistent view):
-
+For buttons (persistent view)
 Defer the interaction ephemerally.
 
 Add or remove the corresponding role.
 
 Send an ephemeral follow‑up confirming the action (e.g., “✅ Added role Gamer”).
 
-Auto‑delete that ephemeral message after 30 seconds (use delete_after=30).
+Auto‑delete that ephemeral message after 30 seconds (delete_after=30).
 
-For emoji reactions (raw reaction events):
-
+For emoji reactions (raw reaction events)
 Because ephemeral messages are impossible in reaction events, send a public message in the same channel saying {user} got/lost role {role}.
 
-Delete that message after 5 seconds (use delete_after=5). This is visible to everyone but very brief.
+Delete that message after 5 seconds (delete_after=5). This is visible to everyone but very brief.
 
 Persistence & Startup
 On bot startup (after on_ready), load all stored configurations from data/reaction_roles.json.
@@ -153,7 +165,7 @@ Reattach the persistent view using the stored role data.
 
 If the message is missing or permissions insufficient, log a warning and skip.
 
-For emoji‑based messages, no view restoration needed – just ensure the reaction listeners are active (they are global).
+For emoji‑based messages, no view restoration needed – reaction listeners are global.
 
 Log the number of successfully restored button messages.
 
@@ -164,7 +176,7 @@ Log only essential events at startup:
 
 Bot ready (one line).
 
-Number of slash commands synced (one line).
+Number of slash commands synced (one line) – use debug_guilds=[guild_id] in discord.Bot initialiser; no need to fetch commands.
 
 Number of restored reaction role messages (one line).
 
@@ -175,13 +187,26 @@ All errors that could crash the bot should be caught and logged, but the bot mus
 Performance Optimisations
 Memory caching: Load the JSON storage into a dict on startup; updates write to disk asynchronously (using asyncio.to_thread).
 
-Fast acknowledgment: Use await interaction.response.defer(ephemeral=True) at the start of any command that may take >2 seconds.
+Fast acknowledgment: Use await interaction.response.defer(ephemeral=True) at the start of any command or callback that may take >2 seconds.
 
 Channel selection: Use discord.ui.ChannelSelect (native component) instead of manual loop.
 
 Parallel restoration: Use asyncio.gather to fetch and edit multiple button messages concurrently.
 
 Member caching: Use guild.get_member (cached) instead of fetch_member (API call) in reaction listeners.
+
+Critical Implementation Notes (from working version)
+Modals can only contain InputText components. Never put Select, RoleSelect, or Button inside a modal.
+
+For role/style selection after chat input: Use a separate View with RoleSelect and/or Select, each with an empty callback that defers the interaction to avoid “This interaction failed”.
+
+Auto‑delete prompt messages: After the admin types their label/emoji, delete both the admin’s message and the bot’s prompt message.
+
+Refresh main wizard message: After adding a mapping, edit the main wizard message (the one with “Add role mapping” and “Finish”) – do not try to edit the selection message again.
+
+Use interaction.followup.send after a defer or after an initial response.send_message.
+
+Always acknowledge dropdown interactions even if no action is needed – use await interaction.response.defer().
 
 Example File Structure
 text
@@ -197,11 +222,11 @@ main.py should:
 
 Load server_config.json.
 
-Set up the bot with intents (message content, members, reactions).
+Set up the bot with intents (members, reactions, message_content).
+
+Initialise discord.Bot with debug_guilds=[guild_id] to restrict slash commands to the single guild.
 
 Load the cog.
-
-Sync slash commands to the specified guild only (not globally).
 
 Run the bot.
 
@@ -212,4 +237,6 @@ main.py
 
 cogs/reaction_roles.py
 
-requirements.txt (include py-cord and any other necessary packages)
+requirements.txt (include py-cord>=2.6.0 and aiofiles>=23.2.0)
+
+The code must be production‑ready, well‑commented, and incorporate all the fixes described above.
