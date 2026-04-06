@@ -363,4 +363,5 @@ MigrationBackup/
 FodyWeavers.xsd
 
 # Localization files
-server_config.join
+server_config.json
+/DiscordBot/cogs/reaction_roles.py.ex
