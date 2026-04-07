@@ -1,9 +1,12 @@
-﻿import json
+import json
 import logging
 from pathlib import Path
 
+import extensions
+
 import hikari
 import lightbulb
+import miru
 
 # logger setup
 logging.basicConfig(
@@ -23,19 +26,19 @@ if not config.get("discord_token") or not config.get("guild_id"):
     logger.error("Missing token or guild_id in server_config.json")
     exit(1)
 
-# bot set up - CORRECT WAY FOR V3
+# bot set up
 bot = hikari.GatewayBot(token=config["discord_token"])
-lb_client = lightbulb.client_from_app(bot,default_enabled_guilds=[config["guild_id"]])
+lb_client = lightbulb.client_from_app(bot)
+mr_client = miru.Client(bot)
 
-# Load extensions
+# load extensions
 @bot.listen(hikari.StartingEvent)
 async def on_starting(_: hikari.StartingEvent) -> None:
-    # Load any extensions from the extensions package
-    import extensions
     await lb_client.load_extensions_from_package(extensions)
 
-# Ensure the Lightbulb client starts once the bot is run
+# load the bot
 bot.subscribe(hikari.StartingEvent, lb_client.start)
 
+# Finale
 if __name__ == "__main__":
     bot.run()

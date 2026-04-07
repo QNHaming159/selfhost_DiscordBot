@@ -1,242 +1,209 @@
-﻿You are to develop a single‑guild Discord bot using Pycord (Python 3.13). The bot provides a reaction role system. Write production‑ready, well‑commented code with proper error handling and performance optimisations.
+﻿You are to develop a single-guild Discord bot using Hikari (Python 3.13) with lightbulb (for commands) and miru (for components/views). The bot provides a reaction role system. Write production-ready, well-commented code with proper error handling and performance optimisations.
 
 General Constraints
 Slash commands only – no prefix commands (!, ?, etc.).
-
 Single guild – all commands and configurations are tied to one guild ID (provided in a config file).
-
 Optimised for speed – use ephemeral responses, defer when needed, avoid blocking I/O.
-
 Persistent – configurations survive restarts using JSON storage.
-
-Support both button‑based and emoji‑based role assignment – the admin chooses per embed.
-
+Support both button-based and emoji-based role assignment – the admin chooses per embed.
+Framework Requirements (Hikari Stack)
+Core: hikari
+Commands: lightbulb
+Components (buttons/selects): miru
 Configuration File (server_config.json)
+
 Located in the project root (next to main.py).
-Example:
 
-json
-{
-  "discord_token": "your_token_here",
-  "guild_id": 123456789012345678,
-  "admin_role_ids": [987654321098765432]
-}
-If the file is missing, create it with default/empty values and prompt the user to fill it (via console) – do not crash.
+If the file is missing:
 
-On startup, validate that the bot token and guild ID are present; if not, log an error and exit gracefully.
+Create it with default/empty values.
+Prompt the user via console to fill it.
+Do not crash.
 
+On startup:
+
+Validate bot token and guild ID.
+If missing → log error and exit gracefully.
 Data Storage (data/reaction_roles.json)
-Store each reaction role message’s configuration.
-
-If the data/ directory or file does not exist, create them automatically.
-
-If the JSON file is corrupted, back it up (e.g., reaction_roles.json.corrupt.<timestamp>) and reset to an empty dictionary without crashing.
-
-Log only essential events (see “Logging” below).
-
+Store each reaction role message configuration.
+Auto-create missing folders/files.
+If corrupted:
+Backup as reaction_roles.json.corrupt.<timestamp>
+Reset safely.
 Slash Commands (Admin Only)
-Two admin‑only slash commands:
 
-/create_reaction_role – interactive wizard to create a new embed message with role buttons or emojis.
+Use lightbulb slash commands.
 
-/edit_reaction_role – edit an existing reaction role embed (by message ID).
+Commands:
 
-Both must check that the user has at least one of the roles listed in admin_role_ids from server_config.json. If not, respond with an ephemeral error and return.
+/create_reaction_role
+/edit_reaction_role
 
+Permission check:
+
+User must have at least one role from admin_role_ids.
+Otherwise → ephemeral error response.
 Creation Wizard Behaviour (/create_reaction_role)
-Step 1 – Modal (only for embed details)
-Show a modal with the following fields:
+Step 1 – Modal (Embed Details)
 
-Embed Title – required.
+Use Hikari modal interaction:
 
-Embed Description – optional (if empty, embed has no description).
+Title (required)
+Description (optional)
+Colour (optional, default #2b2d31)
+Image URL (optional)
+Step 2 – Choose Type
 
-Embed Colour – optional (accepts colour name or hex; default #2b2d31).
-
-Image URL – optional (embed image, not thumbnail).
-
-After modal submission, proceed to Step 2.
-
-Step 2 – Choose type (buttons or emojis)
-After modal submission, send an ephemeral message with two buttons:
+Respond ephemerally with buttons (via miru View):
 
 🔘 Buttons
-
 😊 Emojis
+Step 3 – Channel Selection
 
-When clicked, edit the ephemeral message to reflect the choice and proceed to Step 3.
+Use channel select menu (miru Select) limited to text channels.
 
-Step 3 – Choose target text channel
-Edit the ephemeral message to show a ChannelSelect (only text channels).
-When selected, store the channel ID and proceed.
+Step 4 – Add Role Mappings (Chat-Based)
 
-Step 4 – Add role mappings (chat‑based input, not a modal)
-Edit the ephemeral message again to show:
+Flow:
 
-A button “Add role mapping”
+Click “Add role mapping”
 
-A button “Finish”
+Bot sends ephemeral prompt:
 
-When “Add role mapping” is clicked:
+“Type button label or emoji within 60 seconds.”
 
-Send an ephemeral prompt in the chat: “Please type the button label (for buttons) or emoji (for emojis) in the chat. You have 60 seconds.”
+Use bot.wait_for equivalent in Hikari (wait_for via event stream)
+After input:
+Delete user message
+Delete prompt
+Show selection UI:
+Role select (required)
+Style select (buttons only)
+Confirm button
 
-Store that prompt message, then wait for the admin’s text message (using bot.wait_for('message')).
+⚠️ Important:
 
-Delete the admin’s typed message and the bot’s prompt message.
+All selects must acknowledge interaction using:
 
-After receiving the text, send a new ephemeral message containing:
+await interaction.create_initial_response(hikari.ResponseType.DEFERRED_MESSAGE_UPDATE)
+On Confirm:
+Defer interaction
+Save mapping
+Update wizard message
+Step 5 – Create Message
+Build embed
+If buttons:
+Create persistent miru View
+Each button toggles role
+If emojis:
+Add reactions manually
 
-A role dropdown (RoleSelect) – always present.
+Save config using message ID.
 
-For button type, also a style dropdown (Select with options Primary, Secondary, Success, Danger).
+Edit Wizard (/edit_reaction_role)
 
-A “Confirm” button.
+Flow:
 
-Crucially, both dropdowns must have empty callback methods that simply await interaction.response.defer() to acknowledge the interaction and avoid “This interaction failed” errors.
+Ask for message ID
+Validate existence
+Show options:
+Edit Embed
+Edit Mappings
+Delete Message
 
-When “Confirm” is clicked:
+Use same UI logic as creation.
 
-Defer the interaction ephemerally.
+Interaction Handling
+Buttons (miru Views)
+Defer interaction
+Toggle role
+Send ephemeral confirmation
+Auto-delete after 30s
+Emoji Reactions (Hikari Events)
 
-Read the selected role and (if applicable) style.
+Use:
 
-Add the mapping to an internal list.
+GuildReactionAddEvent
+GuildReactionRemoveEvent
 
-Edit the selection message to “✅ Mapping added!” and close it.
+Since ephemeral isn’t possible:
 
-Edit the main wizard ephemeral message (the one showing current mappings) to reflect the new mapping.
-
-The admin can add as many mappings as needed.
-
-When “Finish” is clicked, proceed to Step 5.
-
-Step 5 – Create the message
-Build the embed with the collected data (title required, description optional).
-
-If type is buttons, create a persistent view with one button per mapping. Each button toggles the corresponding role.
-
-If type is emojis, send the embed and then add each emoji reaction (standard or custom).
-
-Send the final message to the chosen channel.
-
-Store the configuration in data/reaction_roles.json (key = message ID).
-
-Respond to the admin with an ephemeral confirmation containing the message ID and channel mention.
-
-Important: All intermediate steps must edit the same ephemeral message (except the temporary selection views). Use a unique custom_id for the main wizard view.
-
-Edit Wizard Behaviour (/edit_reaction_role)
-Prompt the user via ephemeral message to enter the message ID of an existing reaction role embed. Validate that the ID exists in storage. If not, show error and exit.
-
-Display the current embed data and mappings. Offer edit options via buttons:
-
-Edit Embed – re‑open the embed modal (pre‑filled with current values) to change title, description, colour, image.
-
-Edit Mappings – show the list of mappings with options to add, remove, or edit a mapping. Adding/editing uses the same chat‑based input flow as the creation wizard.
-
-Delete Message – delete the message and remove from storage (confirm first).
-
-After each edit, update the embed and view/reactions accordingly, and save changes to JSON.
-
-Interaction Handling (Role Toggle)
-For buttons (persistent view)
-Defer the interaction ephemerally.
-
-Add or remove the corresponding role.
-
-Send an ephemeral follow‑up confirming the action (e.g., “✅ Added role Gamer”).
-
-Auto‑delete that ephemeral message after 30 seconds (delete_after=30).
-
-For emoji reactions (raw reaction events)
-Because ephemeral messages are impossible in reaction events, send a public message in the same channel saying {user} got/lost role {role}.
-
-Delete that message after 5 seconds (delete_after=5). This is visible to everyone but very brief.
-
+Send temporary public message
+Delete after 5s
 Persistence & Startup
-On bot startup (after on_ready), load all stored configurations from data/reaction_roles.json.
 
-For each stored button‑based message:
+On bot ready:
 
-Fetch the message.
+Load JSON config
+For button messages:
+Fetch message
+Reattach miru Views
 
-Reattach the persistent view using the stored role data.
+Use:
 
-If the message is missing or permissions insufficient, log a warning and skip.
+await asyncio.gather(...)
 
-For emoji‑based messages, no view restoration needed – reaction listeners are global.
+Log:
 
-Log the number of successfully restored button messages.
-
+Number of restored messages
 Logging & Error Handling
-Use Python’s logging module.
 
-Log only essential events at startup:
+Use Python logging:
 
-Bot ready (one line).
+Bot ready
+Commands registered
+Restored messages count
 
-Number of slash commands synced (one line) – use debug_guilds=[guild_id] in discord.Bot initialiser; no need to fetch commands.
+No spam logs.
 
-Number of restored reaction role messages (one line).
-
-No per‑action logs (no “user clicked button”, etc.).
-
-All errors that could crash the bot should be caught and logged, but the bot must continue running.
+Catch all critical errors.
 
 Performance Optimisations
-Memory caching: Load the JSON storage into a dict on startup; updates write to disk asynchronously (using asyncio.to_thread).
+Cache JSON in memory
+Save with asyncio.to_thread
+Always defer long interactions
+Use cached members (guild.get_member)
+Avoid REST calls unless needed
+Critical Implementation Notes (Hikari Version)
+Modals = text inputs only
+Components must use miru Views
 
-Fast acknowledgment: Use await interaction.response.defer(ephemeral=True) at the start of any command or callback that may take >2 seconds.
+Always acknowledge interactions:
 
-Channel selection: Use discord.ui.ChannelSelect (native component) instead of manual loop.
+await interaction.create_initial_response(...)
 
-Parallel restoration: Use asyncio.gather to fetch and edit multiple button messages concurrently.
+Use followups:
 
-Member caching: Use guild.get_member (cached) instead of fetch_member (API call) in reaction listeners.
-
-Critical Implementation Notes (from working version)
-Modals can only contain InputText components. Never put Select, RoleSelect, or Button inside a modal.
-
-For role/style selection after chat input: Use a separate View with RoleSelect and/or Select, each with an empty callback that defers the interaction to avoid “This interaction failed”.
-
-Auto‑delete prompt messages: After the admin types their label/emoji, delete both the admin’s message and the bot’s prompt message.
-
-Refresh main wizard message: After adding a mapping, edit the main wizard message (the one with “Add role mapping” and “Finish”) – do not try to edit the selection message again.
-
-Use interaction.followup.send after a defer or after an initial response.send_message.
-
-Always acknowledge dropdown interactions even if no action is needed – use await interaction.response.defer().
-
+await interaction.execute(...)
+Delete temporary messages after use
+Always update main wizard message, not temporary ones
 Example File Structure
-text
 project/
 ├── main.py
 ├── server_config.json
 ├── data/
 │   └── reaction_roles.json
-├── cogs/
+├── modules/
 │   └── reaction_roles.py
 └── requirements.txt
-main.py should:
+main.py Responsibilities
+Load config
+Initialize Hikari bot
+Setup lightbulb
+Load modules
+Start bot
+requirements.txt
 
-Load server_config.json.
+Include:
 
-Set up the bot with intents (members, reactions, message_content).
-
-Initialise discord.Bot with debug_guilds=[guild_id] to restrict slash commands to the single guild.
-
-Load the cog.
-
-Run the bot.
-
+hikari>=2.0.0
+hikari-lightbulb>=2.0.0
+hikari-miru>=3.0.0
+aiofiles>=23.2.0
 Deliverables
-Provide the complete code for:
+
+Provide full production-ready code for:
 
 main.py
-
-cogs/reaction_roles.py
-
-requirements.txt (include py-cord>=2.6.0 and aiofiles>=23.2.0)
-
-The code must be production‑ready, well‑commented, and incorporate all the fixes described above.
+modules/reaction_roles.py
+requirements.txt

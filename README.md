@@ -4,5 +4,5 @@ Remove `.example` in `server_config.join` then add your own discord token and ot
 **DONOT** commit the `server_config.join` file, it should be in .gitignore.  
 
 This project using
-- Pycord: https://github.com/pycord-development/pycord
+- Hikari: https://github.com/hikari-py/hikari  
 - Python 3.13: https://www.python.org/downloads/release/python-3113/

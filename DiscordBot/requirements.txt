@@ -1,2 +1,2 @@
-py-cord>=2.6.0
-aiofiles>=23.2.0
+hikari >= 2.5.0
+hikari-lightbulb >= 3.2.3

@@ -24,12 +24,17 @@
     <EnableUnmanagedDebugging>false</EnableUnmanagedDebugging>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="temp\main_old_1.py" />
-    <Compile Include="temp\reaction_roles_1.py" />
+    <Compile Include="extensions\simple_command.py" />
+    <Compile Include="extensions\simple_menu.py" />
+    <Compile Include="extensions\simple_modal.py" />
+    <Compile Include="extensions\__init__.py" />
+    <Compile Include="temp\main_pycord.py" />
+    <Compile Include="temp\reaction_roles_1 - Copy.py" />
+    <Compile Include="temp\reaction_roles_pycord.py" />
     <Compile Include="main.py" />
+    <Compile Include="temp\self_main.py" />
   </ItemGroup>
   <ItemGroup>
-    <Content Include="cogs\reaction_roles.py" />
     <Content Include="temp\reaction_roles_old.py" />
     <Content Include="temp\main_old.py" />
     <Content Include="requirements.txt" />
@@ -37,7 +42,7 @@
     <Content Include="server_config.json" />
   </ItemGroup>
   <ItemGroup>
-    <Folder Include="cogs\" />
+    <Folder Include="extensions\" />
     <Folder Include="temp\" />
   </ItemGroup>
   <ItemGroup>
