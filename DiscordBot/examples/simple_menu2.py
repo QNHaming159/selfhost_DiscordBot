@@ -6,19 +6,21 @@ loader = lightbulb.Loader()
 
 class RoleChannelMenu(Menu):
     """A menu with role and channel select menus"""
-    
+
     def __init__(self) -> None:
         super().__init__()
         
         # Add a role select menu
+        self.role_values = None
         self.role_select = self.add_role_select(
             self.on_role_select,
             placeholder="Select a role",
             min_values=1,
             max_values=1
         )
-        
+
         # Add a channel select menu
+        self.channel_values = None
         self.channel_select = self.add_channel_select(
             self.on_channel_select,
             placeholder="Select a channel",
@@ -32,31 +34,18 @@ class RoleChannelMenu(Menu):
             self.on_confirm,
             label="Confirm Selection"
         )
-        
-        # Add an exit button
-        self.exit_button = self.add_interactive_button(
-            hikari.ButtonStyle.DANGER,
-            self.on_exit,
-            label="Exit"
-        )
-    
+
     async def on_role_select(self, ctx: MenuContext) -> None:
-        """Handle role selection - acknowledge silently (like defer in Pycord)"""
-        # This is the Lightbulb equivalent of await interaction.response.defer()
-        # It acknowledges the interaction without sending a visible message
+        self.role_values = ctx.selected_values_for(self.role_select)
         await ctx.respond(edit=True)
     
     async def on_channel_select(self, ctx: MenuContext) -> None:
-        """Handle channel selection - acknowledge silently"""
+        self.channel_values = ctx.selected_values_for(self.channel_select)
         await ctx.respond(edit=True)
     
     async def on_confirm(self, ctx: MenuContext) -> None:
-        """Handle confirm button press - show final selection"""
-        role_values = ctx.selected_values_for(self.role_select)
-        channel_values = ctx.selected_values_for(self.channel_select)
-        
-        role_mention = role_values[0].mention if role_values else "None"
-        channel_mention = channel_values[0].mention if channel_values else "None"
+        role_mention =  self.role_values[0].mention
+        channel_mention = self.channel_values[0].mention
         
         embed = hikari.Embed(
             title="✅ Selection Confirmed",
@@ -67,15 +56,10 @@ class RoleChannelMenu(Menu):
         await ctx.respond(embed=embed)
         ctx.stop_interacting()
     
-    async def on_exit(self, ctx: MenuContext) -> None:
-        """Handle exit button press"""
-        await ctx.respond("Menu closed.", flags=hikari.MessageFlag.EPHEMERAL)
-        ctx.stop_interacting()
-
 @loader.command
 class MenuCommand(
     lightbulb.SlashCommand,
-    name="menu",
+    name="menu2",
     description="Display an interactive menu with role and channel selection",
 ):
     @lightbulb.invoke
@@ -95,10 +79,15 @@ class MenuCommand(
             description="Use the dropdown menus below to select a role and a channel.\n\n"
                         "• **Role Select** - Choose a role from the server\n"
                         "• **Channel Select** - Choose a text channel\n"
-                        "• **Confirm** - Submit your selections\n"
-                        "• **Exit** - Close the menu",
+                        "• **Confirm** - Submit your selections\n",
             color=hikari.Color(0x00AAFF)
         )
         
         # Send the menu with the embed
         await ctx.respond(embed=embed, components=menu)
+
+        # Attach menu then listen
+        try:
+            await menu.attach(ctx.client, timeout=120) 
+        except TimeoutError:
+            pass

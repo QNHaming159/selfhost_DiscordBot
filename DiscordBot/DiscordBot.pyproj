@@ -24,26 +24,23 @@
     <EnableUnmanagedDebugging>false</EnableUnmanagedDebugging>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="extensions\simple_command.py" />
-    <Compile Include="extensions\simple_menu.py" />
-    <Compile Include="extensions\simple_modal.py" />
+    <Compile Include="examples\simple_modalmenu.py" />
+    <Compile Include="examples\simple_command.py" />
+    <Compile Include="examples\simple_menu1.py" />
+    <Compile Include="examples\simple_menu2.py" />
+    <Compile Include="examples\simple_modal.py" />
+    <Compile Include="examples\__init__.py" />
     <Compile Include="extensions\__init__.py" />
-    <Compile Include="temp\main_pycord.py" />
-    <Compile Include="temp\reaction_roles_1 - Copy.py" />
-    <Compile Include="temp\reaction_roles_pycord.py" />
     <Compile Include="main.py" />
-    <Compile Include="temp\self_main.py" />
   </ItemGroup>
   <ItemGroup>
-    <Content Include="temp\reaction_roles_old.py" />
-    <Content Include="temp\main_old.py" />
     <Content Include="requirements.txt" />
     <Content Include="server_config.json.example" />
     <Content Include="server_config.json" />
   </ItemGroup>
   <ItemGroup>
+    <Folder Include="examples\" />
     <Folder Include="extensions\" />
-    <Folder Include="temp\" />
   </ItemGroup>
   <ItemGroup>
     <Interpreter Include=".env\">

@@ -1,5 +1,4 @@
-﻿import datetime
-import hikari
+﻿import hikari
 import lightbulb
 from lightbulb.components import Modal, ModalContext
 
@@ -40,8 +39,7 @@ class FeedbackModal(Modal):
             embed = hikari.Embed(
                 title="📝 New Feedback Submitted!",
                 description=f"**From:** {name_value}\n**Rating:** {rating_value}/5",
-                color=hikari.Color(0x00FF00),
-                timestamp=datetime.datetime.now(tz=datetime.timezone.utc)
+                color=hikari.Color(0x00FF00)
             )
             embed.add_field("Feedback", feedback_value, inline=False)
             embed.set_footer(text=f"User ID: {ctx.user.id}")
@@ -58,9 +56,8 @@ class FeedbackCommand(
 ):
     @lightbulb.invoke
     async def invoke(self, ctx: lightbulb.Context) -> None:
-        # Debug: Print available attributes
-        print(dir(ctx))
         
+        # Create the modal
         modal = FeedbackModal()
         
         await ctx.respond_with_modal(
@@ -69,6 +66,7 @@ class FeedbackCommand(
             components=modal
         )
         
+        # Attach modal then listen
         try:
             await modal.attach(ctx.client, "feedback_modal", timeout=120)
         except TimeoutError:
